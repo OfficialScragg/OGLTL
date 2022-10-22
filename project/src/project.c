@@ -10,7 +10,9 @@
 // Forward declarations
 void err_callback(int error, const char* desc);
 static void key_callback(GLFWwindow* windows, int key, int scancode, int action, int mods);
-void geom();
+static void mouse_callback(GLFWwindow* window, double xpos, double ypos);
+void geom(float y, float x, float z);
+static void keyMovement(GLFWwindow* window);
 
 // Structs
 struct vertex {
@@ -19,15 +21,19 @@ struct vertex {
 };
 
 // Variables
+float WIDTH = 1080.0f;
+float HEIGHT = 720.0f;
 struct vertex vertices[] = {
-		{{0.0f,   0.5f,  -3.0f}, {1.0f, 0.0f, 0.0f, 1.0f}}, 
-		{{0.5f,   -0.5f,   -3.0f}, {0.0f, 1.0f, 0.0f, 1.0f}},
-	       	{{-0.5f,   -0.5f,   -3.0f}, {0.0f, 0.0f, 1.0f, 1.0f}},
-	       	{{0.0f,   -0.5f,  -3.0f}, {1.0f, 0.0f, 0.0f, 1.0f}}
+		{{0.0f,   -0.5f,  -3.5f}, {1.0f, 0.0f, 0.0f, 0.0f}}, // back 
+		{{-0.5f,   -0.5f,   -2.5f}, {0.0f, 1.0f, 0.0f, 1.0f}}, // left
+	       	{{0.5f,   -0.5f,   -2.5f}, {0.0f, 0.0f, 1.0f, 1.0f}}, // right
+	       	{{0.0f,   0.5f,  -3.0f}, {1.0f, 1.0f, 1.0f, 0.0f}} // top
 };
 unsigned int indices[] = {
-	0, 1, 2,
-	2, 3, 1
+	0, 2, 1,
+	3, 0, 1,
+	3, 2, 0,
+	3, 1, 2
 };
 unsigned int VAO;
 unsigned int EBO;
@@ -57,14 +63,31 @@ const char* fragShaderSrc =
 	"	FragColor = fColor;\n"
 	"}";
 unsigned int shaderProgram;
-float rotation = 0.0f;
+float rot_y = 0.0f;
+float rot_x = 0.0f;
+float rot_z = 0.0f;
+float cam_y = 0.0f;
+// Matrices
 mat4 transform;
 mat4 view;
 mat4 projection;
 vec3 position;
 vec3 scale;
-vec3 camPos;
-vec3 dir;
+// Camera 
+vec3 camPos = {0.0f, 0.0f, 2.0f};
+vec3 dir = {0.0f, 0.0f, -1.0f};
+vec3 camUp = {0.0f, 1.0f, 0.0f};
+float yaw = -90.0f;
+float pitch = 0.0f;
+float camSpeed = 2.0f;
+float deltaSpeed = 0.0f;
+// Time
+float deltaTime = 0.0f;
+float lastFrame = 0.0f;
+// Mouse
+float lastX = 400;
+float lastY = 300;
+int firstMouse = 1;
 
 // Main function
 int main(int argc, char* argv[]){
@@ -77,7 +100,7 @@ int main(int argc, char* argv[]){
 	glfwSetErrorCallback(err_callback);
 	
 	// Create a window!
-	GLFWwindow* window = glfwCreateWindow(640, 480, "Project", NULL, NULL);
+	GLFWwindow* window = glfwCreateWindow(WIDTH, HEIGHT, "Project", NULL, NULL);
 	if(!window){
 		// ERR
 		printf("ERROR: Window creation failed!\n");
@@ -90,11 +113,13 @@ int main(int argc, char* argv[]){
 	// Load OpenGL API with Glad
 	gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
 	
-	// Set Keyboard input callback
+	// Setup Keyboard and Mouse Input
 	glfwSetKeyCallback(window, key_callback);
-	
+	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);  	
+	glfwSetCursorPosCallback(window, mouse_callback);
+
 	// Where shall we draw
-	glViewport(0, 0, 640, 480);
+	glViewport(0, 0, WIDTH, HEIGHT);
 
 	// Compile Vertex Shaders
 	vertexShader = glCreateShader(GL_VERTEX_SHADER);
@@ -157,13 +182,24 @@ int main(int argc, char* argv[]){
 	glDeleteShader(vertexShader);
 	glDeleteShader(fragShader);
 
+	glEnable(GL_CULL_FACE);
+
 	// While window is open...keep running
 	while(!glfwWindowShouldClose(window)){
+		// Time
+		float currentFrame = glfwGetTime();
+		deltaTime = currentFrame - lastFrame;
+		lastFrame = currentFrame;
+		deltaSpeed = (float)(camSpeed * deltaTime);
 		// Running
 		glClearColor(100.0f / 255.0f, 100.0f / 255.0f, 100.0f / 255.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
-		geom();
-		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+		keyMovement(window);
+		geom(rot_y, rot_x, rot_z);
+		//rot_y+=1.2f;
+		//rot_z+=2.3f;
+		//rot_x+=0.9f;
+		glDrawElements(GL_TRIANGLES, 12, GL_UNSIGNED_INT, 0);
 		GLenum err;
       		if((err = glGetError()) != GL_NO_ERROR){
          		printf("OpenGL error: %d\n", err);
@@ -179,24 +215,104 @@ int main(int argc, char* argv[]){
 }
 
 // Mathy stuffs
-void geom(){
+void geom(float y, float x, float z){
+	// Transform parameters
+	vec3 pivot = {0.0f, 0.0f, -3.0f};
+	vec3 y_axis = {0.0f, 1.0f, 0.0f};
+	vec3 x_axis = {1.0f, 0.0f, 0.0f};
+	vec3 z_axis = {0.0f, 0.0f, 1.0f};
+
+	// Set matrices to identities
 	glm_mat4_identity(transform);
 	glm_mat4_identity(view);
 	glm_mat4_identity(projection);
-
-	//vec3 rotate = {0.0f, -0.5f, -2.0f};
-
-	//View
-	//glm_translate(view, rotate);
 	
+	// Transform Matrix
+	glm_scale_uni(transform, 1.0f);
+	glm_rotate_at(transform, pivot, glm_rad(y), y_axis);
+	glm_rotate_at(transform, pivot, glm_rad(x), x_axis);
+	glm_rotate_at(transform, pivot, glm_rad(z), z_axis);
+	
+	// View
+	glm_look(camPos, dir, camUp, view);
+
 	// Projection Matrix
-	//glm_perspective_default((float)(640.0f/480.0f), projection);
-	glm_perspective(glm_rad(90.0f), (float)(640.0f/480.0f), 0.1f, 100.0f, projection);
+	glm_perspective(glm_rad(90.0f), (float)(WIDTH/HEIGHT), 0.1f, 100.0f, projection);
 
 	// Upload Uniforms
 	glUniformMatrix4fv(0, 1, GL_FALSE, (float *)transform);
 	glUniformMatrix4fv(1, 1, GL_FALSE, (float *)view);
 	glUniformMatrix4fv(2, 1, GL_FALSE, (float *)projection);
+	return;
+}
+
+// Keyboard movement
+static void keyMovement(GLFWwindow* window){
+	if(glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS){
+		glm_vec3_muladds(dir, deltaSpeed, camPos);
+        }
+
+        if(glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+		vec3 res = {0.0f, 0.0f, 0.0f};
+                glm_vec3_scale(dir, deltaSpeed, res);
+                glm_vec3_sub(camPos, res, camPos);
+	}
+	
+	if(glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS){
+                vec3 res1 = {0.0f, 0.0f, 0.0f};
+                vec3 res2 = {0.0f, 0.0f, 0.0f};
+                vec3 res3 = {0.0f, 0.0f, 0.0f};
+                glm_vec3_cross(dir, camUp, res1);
+                glm_vec3_normalize(res1);
+                glm_vec3_muladds(res1, deltaSpeed, res2);
+                glm_vec3_sub(camPos, res2, res3);
+                glm_vec3_copy(res3, camPos);
+        }
+
+        if(glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS){
+                vec3 res1 = {0.0f, 0.0f, 0.0f};
+                vec3 res2 = {0.0f, 0.0f, 0.0f};
+                vec3 res3 = {0.0f, 0.0f, 0.0f};
+                glm_vec3_cross(dir, camUp, res1);
+                glm_vec3_normalize(res1);
+                glm_vec3_muladds(res1, deltaSpeed, res2);
+                glm_vec3_add(camPos, res2, res3);
+                glm_vec3_copy(res3, camPos);
+	}
+	return;
+}
+
+// Get mouse input
+static void mouse_callback(GLFWwindow* window, double xpos, double ypos){
+	if (firstMouse){
+        	lastX = xpos;
+        	lastY = ypos;
+        	firstMouse = 0;
+    	}
+
+	float xoffset = xpos - lastX;
+	float yoffset = lastY - ypos;
+	lastX = xpos;
+	lastY = ypos;
+
+	const float sense = 0.1f;
+	xoffset *= sense;
+	yoffset *= sense;
+
+	yaw += xoffset;
+	pitch += yoffset;
+
+	// Clamp values
+	if(pitch > 89.0f){
+		pitch = 89.0f;
+	}else if(pitch < -89.0f){
+		pitch = -89.0f;
+	}
+	// Apply direction changes
+	dir[0] = (float)(cos(glm_rad(yaw)) * cos(glm_rad(pitch)));
+        dir[1] = sin(glm_rad(pitch));
+        dir[2] = (float)(sin(glm_rad(yaw)) * cos(glm_rad(pitch)));
+	glm_vec3_normalize(dir);
 
 	return;
 }
@@ -205,7 +321,7 @@ void geom(){
 static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods){
 	if(key == GLFW_KEY_ESCAPE && action == GLFW_PRESS){
 		glfwSetWindowShouldClose(window, GLFW_TRUE);
-	}else if(key == GLFW_KEY_W && action == GLFW_PRESS){
+	}else if(key == GLFW_KEY_X && action == GLFW_PRESS){
 		if(wireframe){
 			wireframe = 0;
 			glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
@@ -214,6 +330,7 @@ static void key_callback(GLFWwindow* window, int key, int scancode, int action, 
 			glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 		}
 	}
+
 	return;
 }
 
