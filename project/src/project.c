@@ -249,7 +249,7 @@ void geom(float y, float x, float z){
 	glm_look(camPos, dir, camUp, view);
 
 	// Projection Matrix
-	glm_perspective(glm_rad(120.0f), (float)(WIDTH/HEIGHT), 0.1f, 250.0f, projection);
+	glm_perspective(glm_rad(90.0f), (float)(WIDTH/HEIGHT), 0.1f, 200.0f, projection);
 
 	// Upload Uniforms
 	glUniformMatrix4fv(0, 1, GL_FALSE, (float *)transform);
