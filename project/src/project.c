@@ -24,16 +24,22 @@ struct vertex {
 float WIDTH = 1080.0f;
 float HEIGHT = 720.0f;
 struct vertex vertices[] = {
-		{{0.0f,   -0.5f,  -3.5f}, {1.0f, 0.0f, 0.0f, 0.0f}}, // back 
-		{{-0.5f,   -0.5f,   -2.5f}, {0.0f, 1.0f, 0.0f, 1.0f}}, // left
-	       	{{0.5f,   -0.5f,   -2.5f}, {0.0f, 0.0f, 1.0f, 1.0f}}, // right
-	       	{{0.0f,   0.5f,  -3.0f}, {1.0f, 1.0f, 1.0f, 0.0f}} // top
+		{{0.0f,   2.0f,  -0.5f}, {1.0f, 0.0f, 0.0f, 0.0f}}, // back 
+		{{-0.5f,   2.0f,   0.5f}, {0.0f, 1.0f, 0.0f, 1.0f}}, // left
+	       	{{0.5f,   2.0f,   0.5f}, {0.0f, 0.0f, 1.0f, 1.0f}}, // right
+	       	{{0.0f,   3.0f,  0.0f}, {1.0f, 1.0f, 1.0f, 0.0f}}, // top
+		{{100.0f, 0.0f, 100.0f}, {0.2f, 0.8f, 0.2f, 1.0f}},
+		{{100.0f, 0.0f, -100.0f}, {0.2f, 0.8f, 0.2f, 1.0f}},
+		{{-100.0f, 0.0f, 100.0f}, {0.2f, 0.8f, 0.2f, 1.0f}},
+		{{-100.0f, 0.0f, -100.0f}, {0.2f, 0.8f, 0.2f, 1.0f}}
 };
 unsigned int indices[] = {
 	0, 2, 1,
 	3, 0, 1,
 	3, 2, 0,
-	3, 1, 2
+	3, 1, 2,
+	4, 5, 6,
+	6, 5, 7
 };
 unsigned int VAO;
 unsigned int EBO;
@@ -51,8 +57,11 @@ const char* vertexShaderSrc =
     	"out vec4 fColor;\n"
 	"void main(){\n"
 	"	fColor = aCol;\n"
-    	"	gl_Position = uProjection * uView * (uTransform * vec4(aPos, 1.0f));\n"
-    	"//	gl_Position = vec4(aPos, 1.0f);\n"
+	"	if(fColor != vec4(0.2f, 0.8f, 0.2f, 1.0f)){\n"
+    	"		gl_Position = uProjection * uView * (uTransform * vec4(aPos, 1.0f));\n"
+	"	}else{\n"
+	"		gl_Position = uProjection * uView * vec4(aPos, 1.0f);\n"
+	"	}\n"
 	"}";
 unsigned int fragShader;
 const char* fragShaderSrc =
@@ -74,11 +83,11 @@ mat4 projection;
 vec3 position;
 vec3 scale;
 // Camera 
-vec3 camPos = {0.0f, 0.0f, 2.0f};
+vec3 camPos = {0.0f, 1.0f, 5.0f};
 vec3 dir = {0.0f, 0.0f, -1.0f};
 vec3 camUp = {0.0f, 1.0f, 0.0f};
 float yaw = -90.0f;
-float pitch = 0.0f;
+float pitch = 90.0f;
 float camSpeed = 2.0f;
 float deltaSpeed = 0.0f;
 // Time
@@ -182,7 +191,10 @@ int main(int argc, char* argv[]){
 	glDeleteShader(vertexShader);
 	glDeleteShader(fragShader);
 
+	glfwWindowHint(GLFW_DEPTH_BITS, 24);
 	glEnable(GL_CULL_FACE);
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LESS);
 
 	// While window is open...keep running
 	while(!glfwWindowShouldClose(window)){
@@ -192,14 +204,14 @@ int main(int argc, char* argv[]){
 		lastFrame = currentFrame;
 		deltaSpeed = (float)(camSpeed * deltaTime);
 		// Running
-		glClearColor(100.0f / 255.0f, 100.0f / 255.0f, 100.0f / 255.0f, 1.0f);
-		glClear(GL_COLOR_BUFFER_BIT);
+		glClearColor(100.0f / 255.0f, 180.0f / 255.0f, 255.0f / 255.0f, 1.0f);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		keyMovement(window);
 		geom(rot_y, rot_x, rot_z);
-		//rot_y+=1.2f;
-		//rot_z+=2.3f;
-		//rot_x+=0.9f;
-		glDrawElements(GL_TRIANGLES, 12, GL_UNSIGNED_INT, 0);
+		rot_y+=1.2f;
+		rot_z+=2.3f;
+		rot_x+=0.9f;
+		glDrawElements(GL_TRIANGLES, 18, GL_UNSIGNED_INT, 0);
 		GLenum err;
       		if((err = glGetError()) != GL_NO_ERROR){
          		printf("OpenGL error: %d\n", err);
@@ -237,7 +249,7 @@ void geom(float y, float x, float z){
 	glm_look(camPos, dir, camUp, view);
 
 	// Projection Matrix
-	glm_perspective(glm_rad(90.0f), (float)(WIDTH/HEIGHT), 0.1f, 100.0f, projection);
+	glm_perspective(glm_rad(120.0f), (float)(WIDTH/HEIGHT), 0.1f, 250.0f, projection);
 
 	// Upload Uniforms
 	glUniformMatrix4fv(0, 1, GL_FALSE, (float *)transform);
